@@ -1,6 +1,4 @@
-// FIX: Switched to Firebase compat initialization to resolve import errors from 'firebase/app'.
-// The FirebaseApp instance from the compat library is compatible with the modular functions (e.g., getAuth) used elsewhere in the app.
-import firebase from 'firebase/compat/app';
+import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
@@ -18,9 +16,8 @@ if (!firebaseConfig.apiKey) {
     console.error("Firebase config is missing. Make sure you have set up your .env file with VITE_FIREBASE_... variables.");
 }
 
-// Initialize Firebase using the compat library for the app instance.
-// This supports hot-reloading in dev environments.
-const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : firebase.app();
+// Initialize Firebase using the modern modular SDK.
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
