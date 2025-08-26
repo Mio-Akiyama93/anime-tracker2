@@ -57,6 +57,20 @@ export const Watchlist: React.FC<{
 
     return (
         <div>
+            <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
+                <h1 className="text-3xl font-bold">My Watchlist</h1>
+                {isAnilistLinked && (
+                    <button
+                        onClick={onForceSync}
+                        disabled={isSyncing}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-brand-secondary text-white font-semibold rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        aria-label="Force sync with AniList"
+                    >
+                        <SyncIcon className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
+                        <span>{isSyncing ? 'Syncing...' : 'Sync with AniList'}</span>
+                    </button>
+                )}
+            </div>
             {watchlist.length === 0 ? (
                 <div className="text-center py-20">
                     <TvIcon className="w-16 h-16 mx-auto text-brand-text-muted" />

@@ -113,6 +113,7 @@ export default function App() {
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncingIds, setSyncingIds] = useState(new Set<number>());
+  const [isFullSyncing, setIsFullSyncing] = useState(false);
 
   const isInitialSyncing = useRef(false);
 
@@ -302,9 +303,56 @@ export default function App() {
         });
     }
   }, [userProfile, watchlist]);
+
+  const handleForceSync = useCallback(async () => {
+    if (!userProfile || !userProfile.anilistToken || !anilistProfile) {
+      setSyncError("Cannot sync: Not linked to AniList or profile not loaded.");
+      return;
+    }
+
+    setIsFullSyncing(true);
+    setSyncError(null);
+
+    try {
+      // 1. Fetch latest from AniList - this is the source of truth
+      const anilistItems = await getWatchlist(anilistProfile.id, userProfile.anilistToken);
+      const anilistMap = new Map(anilistItems.map(item => [item.anime.id, item]));
+
+      // 2. Fetch current from Firestore to identify items to be deleted
+      const watchlistRef = collection(db, 'users', userProfile.uid, 'watchlist');
+      const firestoreSnapshot = await getDocs(watchlistRef);
+      const firestoreItems = firestoreSnapshot.docs.map(doc => doc.data() as WatchlistItem);
+
+      const batch = writeBatch(db);
+
+      // 3. Set all AniList items in Firestore. This handles additions and updates.
+      for (const anilistItem of anilistItems) {
+        const docRef = doc(watchlistRef, anilistItem.anime.id.toString());
+        batch.set(docRef, anilistItem);
+      }
+
+      // 4. Delete items from Firestore that are no longer on AniList
+      for (const firestoreItem of firestoreItems) {
+        if (!anilistMap.has(firestoreItem.anime.id)) {
+          const docRef = doc(watchlistRef, firestoreItem.anime.id.toString());
+          batch.delete(docRef);
+        }
+      }
+
+      // 5. Commit all changes at once
+      await batch.commit();
+
+    } catch (err) {
+      console.error("Force sync failed:", err);
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred while syncing.";
+      setSyncError(`Sync failed: ${errorMessage}`);
+    } finally {
+      setIsFullSyncing(false);
+    }
+  }, [userProfile, anilistProfile]);
   
   const watchlistMap = useMemo(() => new Map(watchlist.map(item => [item.anime.id, item])), [watchlist]);
-  const anySyncing = isWatchlistLoading || syncingIds.size > 0;
+  const anySyncing = isWatchlistLoading || syncingIds.size > 0 || isFullSyncing;
 
   const renderContent = () => {
       if (!userProfile) {
@@ -347,8 +395,8 @@ export default function App() {
                 onRemoveFromWatchlist={handleRemoveFromWatchlist}
                 onCardClick={handleSelectAnime}
                 syncingIds={syncingIds}
-                onForceSync={() => {}} // Syncing is real-time now
-                isSyncing={anySyncing}
+                onForceSync={handleForceSync}
+                isSyncing={isFullSyncing}
                 isAnilistLinked={!!anilistProfile}
               />
             )}
