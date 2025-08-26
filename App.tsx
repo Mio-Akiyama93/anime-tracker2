@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query } from 'firebase/firestore';
-import { Anime, WatchlistItem, WatchStatus, User } from './types';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query, getDoc } from 'firebase/firestore';
+import { Anime, WatchlistItem, WatchStatus, User, Friend, UserProfile } from './types';
 import { searchAnime, getWatchlist, saveWatchlistItem, deleteWatchlistItem } from './services/anilistService';
 import { useAuth } from './hooks/useAuth';
 import { db } from './services/firebase';
@@ -14,6 +14,7 @@ import { Sync } from './components/Sync';
 import { TvIcon, SearchIcon, XMarkIcon, SparklesIcon, ChartBarIcon, UserIcon, UsersIcon } from './components/icons';
 import { Watchlist } from './components/Watchlist';
 import { Friends } from './components/Friends';
+import { FriendProfile } from './components/FriendProfile';
 
 type View = 'search' | 'watchlist' | 'overview' | 'profile' | 'recommendations' | 'sync' | 'friends';
 
@@ -114,6 +115,13 @@ export default function App() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncingIds, setSyncingIds] = useState(new Set<number>());
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+
+  // State for viewing friend's profile
+  const [viewingFriend, setViewingFriend] = useState<Friend | null>(null);
+  const [friendProfile, setFriendProfile] = useState<UserProfile | null>(null);
+  const [friendWatchlist, setFriendWatchlist] = useState<WatchlistItem[]>([]);
+  const [isFetchingFriendData, setIsFetchingFriendData] = useState(false);
+
 
   const isInitialSyncing = useRef(false);
   const lastSyncTimestamp = useRef<number>(0);
@@ -376,6 +384,37 @@ export default function App() {
       clearInterval(intervalId);
     };
   }, [syncAniListWatchlist]);
+
+  const handleViewFriend = useCallback(async (friend: Friend) => {
+    setView('friends');
+    setSelectedAnime(null);
+    setViewingFriend(friend);
+    setIsFetchingFriendData(true);
+    setError(null);
+    try {
+        const friendProfileDoc = await getDoc(doc(db, 'users', friend.uid));
+        if (friendProfileDoc.exists()) {
+            setFriendProfile(friendProfileDoc.data() as UserProfile);
+        } else {
+            throw new Error("Could not find friend's profile.");
+        }
+        const friendWatchlistRef = collection(db, 'users', friend.uid, 'watchlist');
+        const friendWatchlistSnap = await getDocs(friendWatchlistRef);
+        const watchlistData = friendWatchlistSnap.docs.map(doc => doc.data() as WatchlistItem);
+        setFriendWatchlist(watchlistData);
+    } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load friend's data.");
+        setViewingFriend(null);
+    } finally {
+        setIsFetchingFriendData(false);
+    }
+  }, []);
+
+  const handleCloseFriendView = () => {
+      setViewingFriend(null);
+      setFriendProfile(null);
+      setFriendWatchlist([]);
+  };
   
   const watchlistMap = useMemo(() => new Map(watchlist.map(item => [item.anime.id, item])), [watchlist]);
   const anySyncing = isWatchlistLoading || syncingIds.size > 0 || isBackgroundSyncing;
@@ -432,7 +471,23 @@ export default function App() {
                 onSelectAnime={handleSelectAnime}
               />
             )}
-            {view === 'friends' && <Friends />}
+            {view === 'friends' && (
+              viewingFriend ? (
+                 <FriendProfile
+                    friend={viewingFriend}
+                    friendProfile={friendProfile}
+                    friendWatchlist={friendWatchlist}
+                    isLoading={isFetchingFriendData}
+                    onClose={handleCloseFriendView}
+                    onSelectAnime={handleSelectAnime}
+                    currentUserWatchlistMap={watchlistMap}
+                    onAddToCurrentUserWatchlist={handleAddToWatchlist}
+                    syncingIds={syncingIds}
+                />
+              ) : (
+                <Friends onViewFriend={handleViewFriend} />
+              )
+            )}
             {view === 'sync' && (
                 <Sync 
                     onSyncSuccess={handleInitialSync} 

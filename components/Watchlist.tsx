@@ -15,20 +15,26 @@ const getStatusLabel = (status: WatchStatus) => {
     return status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 }
 
-export const Watchlist: React.FC<{ 
+interface WatchlistProps {
     watchlist: WatchlistItem[];
-    onUpdateStatus: (anime: Anime, status: WatchStatus) => void;
-    onUpdateWatchedEpisodes: (animeId: number, change: number) => void;
-    onRemoveFromWatchlist: (animeId: number) => void;
     onCardClick: (anime: Anime) => void;
     syncingIds: Set<number>;
-}> = ({ 
+    onUpdateStatus: (anime: Anime, status: WatchStatus) => void;
+    onUpdateWatchedEpisodes?: (animeId: number, change: number) => void;
+    onRemoveFromWatchlist?: (animeId: number) => void;
+    isReadOnly?: boolean;
+    currentUserWatchlistMap?: Map<number, WatchlistItem>;
+}
+
+export const Watchlist: React.FC<WatchlistProps> = ({ 
     watchlist, 
     onUpdateStatus, 
     onUpdateWatchedEpisodes, 
     onRemoveFromWatchlist, 
     onCardClick, 
     syncingIds,
+    isReadOnly = false,
+    currentUserWatchlistMap,
 }) => {
     const groupedByStatus = useMemo(() => {
         const groups: Partial<Record<WatchStatus, WatchlistItem[]>> = {};
@@ -39,7 +45,9 @@ export const Watchlist: React.FC<{
         return groups;
     }, [watchlist]);
     
-    const [expandedCategories, setExpandedCategories] = useState<Set<WatchStatus>>(new Set([WatchStatus.Watching]));
+    const [expandedCategories, setExpandedCategories] = useState<Set<WatchStatus>>(
+        new Set(isReadOnly ? statusOrder : [WatchStatus.Watching])
+    );
 
     const toggleCategory = (category: WatchStatus) => {
         setExpandedCategories(prev => {
@@ -51,14 +59,16 @@ export const Watchlist: React.FC<{
 
     return (
         <div>
-            <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
-                <h1 className="text-3xl font-bold">My Watchlist</h1>
-            </div>
+            {!isReadOnly && (
+                <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
+                    <h1 className="text-3xl font-bold">My Watchlist</h1>
+                </div>
+            )}
             {watchlist.length === 0 ? (
                 <div className="text-center py-20">
                     <TvIcon className="w-16 h-16 mx-auto text-brand-text-muted" />
-                    <h2 className="mt-4 text-2xl font-semibold">Your Watchlist is Empty</h2>
-                    <p className="mt-2 text-brand-text-muted">Use the search to find anime and add it to your list.</p>
+                    <h2 className="mt-4 text-2xl font-semibold">Watchlist is Empty</h2>
+                    <p className="mt-2 text-brand-text-muted">{isReadOnly ? "This user hasn't added any anime yet." : "Use the search to find anime and add it to your list."}</p>
                 </div>
             ) : (
                 <div className="space-y-8">
@@ -87,10 +97,14 @@ export const Watchlist: React.FC<{
                                                         onUpdateWatchedEpisodes={onUpdateWatchedEpisodes}
                                                         onCardClick={onCardClick}
                                                         isSyncing={syncingIds.has(item.anime.id)}
+                                                        isReadOnly={isReadOnly}
+                                                        currentUserWatchlistItem={currentUserWatchlistMap?.get(item.anime.id)}
                                                     />
-                                                    <button onClick={() => onRemoveFromWatchlist(item.anime.id)} className="absolute -top-2 -right-2 z-20 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:bg-red-600 transition-colors" aria-label="Remove from watchlist">
-                                                        <XMarkIcon className="w-4 h-4"/>
-                                                    </button>
+                                                    {!isReadOnly && onRemoveFromWatchlist && (
+                                                        <button onClick={() => onRemoveFromWatchlist(item.anime.id)} className="absolute -top-2 -right-2 z-20 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:bg-red-600 transition-colors" aria-label="Remove from watchlist">
+                                                            <XMarkIcon className="w-4 h-4"/>
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

@@ -4,11 +4,13 @@ import { PlusIcon, CheckIcon, MinusIcon, TvIcon } from './icons';
 
 interface AnimeCardProps {
   anime: Anime;
-  onAddToWatchlist: (anime: Anime, status: WatchStatus) => void;
   watchlistItem?: WatchlistItem | null;
+  onAddToWatchlist?: (anime: Anime, status: WatchStatus) => void;
   onUpdateWatchedEpisodes?: (animeId: number, change: number) => void;
   onCardClick?: (anime: Anime) => void;
   isSyncing?: boolean;
+  isReadOnly?: boolean;
+  currentUserWatchlistItem?: WatchlistItem | null;
 }
 
 const getStatusColor = (status: WatchStatus) => {
@@ -41,7 +43,16 @@ const AddToWatchlistDropdown: React.FC<{ onSelect: (status: WatchStatus) => void
 );
 
 
-export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, onAddToWatchlist, watchlistItem, onUpdateWatchedEpisodes, onCardClick, isSyncing }) => {
+export const AnimeCard: React.FC<AnimeCardProps> = ({ 
+    anime, 
+    onAddToWatchlist, 
+    watchlistItem, 
+    onUpdateWatchedEpisodes, 
+    onCardClick, 
+    isSyncing,
+    isReadOnly = false,
+    currentUserWatchlistItem,
+}) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleToggleDropdown = (e: React.MouseEvent) => {
@@ -51,13 +62,15 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, onAddToWatchlist, w
   };
   
   const handleSelectStatus = (status: WatchStatus) => {
-      onAddToWatchlist(anime, status);
+      onAddToWatchlist?.(anime, status);
       setIsDropdownOpen(false);
   }
 
   const title = anime.title.english || anime.title.romaji;
   const coverColor = anime.coverImage?.color || '#334155'; // slate-700
   const coverImageUrl = anime.coverImage?.extraLarge;
+
+  const itemForAction = isReadOnly ? currentUserWatchlistItem : watchlistItem;
 
   return (
     <div 
@@ -113,35 +126,49 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, onAddToWatchlist, w
                 {anime.averageScore && <span className="text-xs text-brand-text-muted">{anime.averageScore}%</span>}
             </div>
         ) : (
-            <div className="flex items-center text-xs text-brand-text-muted mt-1 gap-2">
-                <span>{anime.episodes ? `${anime.episodes} episodes` : 'TBA'}</span>
-                {anime.averageScore && <><span>&bull;</span><span>{anime.averageScore}%</span></>}
+             <div className="flex items-center justify-between text-xs text-brand-text-muted mt-1 gap-2">
+                <div className="flex items-center gap-2">
+                    <span>{anime.episodes ? `${anime.episodes} episodes` : 'TBA'}</span>
+                    {anime.averageScore && <><span>&bull;</span><span>{anime.averageScore}%</span></>}
+                </div>
+                 {isReadOnly && watchlistItem && (
+                    <span className="font-semibold">{watchlistItem.watchedEpisodes} / {watchlistItem.anime.episodes ?? '?'}</span>
+                )}
             </div>
         )}
 
       </div>
 
-      <div className="absolute top-2 right-2 z-20">
-        <div className="relative">
-          {watchlistItem ? (
-              <button 
-                onClick={handleToggleDropdown}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-white rounded-full shadow-lg transition-transform transform group-hover:scale-110 hover:opacity-90 ${getStatusColor(watchlistItem.status)}`}
-              >
-                <CheckIcon className="w-4 h-4" />
-                <span>{getStatusLabel(watchlistItem.status)}</span>
-              </button>
-          ) : (
-            <button 
-              onClick={handleToggleDropdown} 
-              style={{ backgroundColor: coverColor }}
-              className="p-2 rounded-full text-white shadow-lg transition-transform transform group-hover:scale-110 hover:opacity-90"
-            >
-              <PlusIcon className="w-5 h-5" />
-            </button>
-          )}
-          {isDropdownOpen && <AddToWatchlistDropdown onSelect={handleSelectStatus} />}
-        </div>
+        <div className="absolute top-2 right-2 z-20 flex items-start gap-1">
+             {isReadOnly && watchlistItem && (
+                <div 
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-white rounded-full shadow-lg ${getStatusColor(watchlistItem.status)}`}
+                >
+                    <TvIcon className="w-4 h-4" />
+                </div>
+            )}
+            {onAddToWatchlist && (
+                <div className="relative">
+                {itemForAction ? (
+                    <button 
+                        onClick={handleToggleDropdown}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-white rounded-full shadow-lg transition-transform transform group-hover:scale-110 hover:opacity-90 ${getStatusColor(itemForAction.status)}`}
+                    >
+                        <CheckIcon className="w-4 h-4" />
+                        <span>{getStatusLabel(itemForAction.status)}</span>
+                    </button>
+                ) : (
+                    <button 
+                    onClick={handleToggleDropdown} 
+                    style={{ backgroundColor: coverColor }}
+                    className="p-2 rounded-full text-white shadow-lg transition-transform transform group-hover:scale-110 hover:opacity-90"
+                    >
+                    <PlusIcon className="w-5 h-5" />
+                    </button>
+                )}
+                {isDropdownOpen && <AddToWatchlistDropdown onSelect={handleSelectStatus} />}
+                </div>
+            )}
       </div>
     </div>
   );

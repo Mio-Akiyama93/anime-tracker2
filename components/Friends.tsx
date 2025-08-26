@@ -5,7 +5,11 @@ import { SearchIcon, UserIcon, XMarkIcon, CheckIcon, PlusIcon } from './icons';
 
 type FriendsView = 'list' | 'add' | 'requests';
 
-export const Friends: React.FC = () => {
+interface FriendsProps {
+    onViewFriend: (friend: Friend) => void;
+}
+
+export const Friends: React.FC<FriendsProps> = ({ onViewFriend }) => {
     const { userProfile, friends, incomingRequests, outgoingRequests, searchUsers, sendFriendRequest, respondToFriendRequest, cancelFriendRequest, removeFriend } = useAuth();
     const [view, setView] = useState<FriendsView>('list');
     const [searchQuery, setSearchQuery] = useState('');
@@ -75,14 +79,14 @@ export const Friends: React.FC = () => {
                             <ul className="space-y-3">
                                 {friends.map(friend => (
                                     <li key={friend.uid} className="flex items-center justify-between bg-brand-bg-light p-3 rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <UserIcon className="w-8 h-8 p-1 bg-brand-bg-dark rounded-full text-slate-400" />
+                                        <button onClick={() => onViewFriend(friend)} className="flex items-center gap-3 text-left w-full hover:opacity-80 transition-opacity">
+                                            <UserIcon className="w-8 h-8 p-1 bg-brand-bg-dark rounded-full text-slate-400 flex-shrink-0" />
                                             <span className="font-semibold">{friend.displayName}</span>
-                                        </div>
+                                        </button>
                                         <button 
                                             onClick={() => handleAction(() => removeFriend(friend))}
                                             disabled={actionLoading}
-                                            className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                                            className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 flex-shrink-0 ml-4"
                                         >
                                             Unfriend
                                         </button>
