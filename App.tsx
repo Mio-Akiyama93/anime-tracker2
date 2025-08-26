@@ -113,9 +113,10 @@ export default function App() {
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncingIds, setSyncingIds] = useState(new Set<number>());
-  const [isFullSyncing, setIsFullSyncing] = useState(false);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
 
   const isInitialSyncing = useRef(false);
+  const lastSyncTimestamp = useRef<number>(0);
 
   // Firestore real-time listener for watchlist
   useEffect(() => {
@@ -304,34 +305,31 @@ export default function App() {
     }
   }, [userProfile, watchlist]);
 
-  const handleForceSync = useCallback(async () => {
+  const syncAniListWatchlist = useCallback(async () => {
+    if (isBackgroundSyncing || (Date.now() - lastSyncTimestamp.current < 60000)) {
+        return;
+    }
     if (!userProfile || !userProfile.anilistToken || !anilistProfile) {
-      setSyncError("Cannot sync: Not linked to AniList or profile not loaded.");
-      return;
+        return;
     }
 
-    setIsFullSyncing(true);
+    setIsBackgroundSyncing(true);
     setSyncError(null);
 
     try {
-      // 1. Fetch latest from AniList - this is the source of truth
       const anilistItems = await getWatchlist(anilistProfile.id, userProfile.anilistToken);
       const anilistMap = new Map(anilistItems.map(item => [item.anime.id, item]));
 
-      // 2. Fetch current from Firestore to identify items to be deleted
       const watchlistRef = collection(db, 'users', userProfile.uid, 'watchlist');
       const firestoreSnapshot = await getDocs(watchlistRef);
       const firestoreItems = firestoreSnapshot.docs.map(doc => doc.data() as WatchlistItem);
 
       const batch = writeBatch(db);
 
-      // 3. Set all AniList items in Firestore. This handles additions and updates.
       for (const anilistItem of anilistItems) {
         const docRef = doc(watchlistRef, anilistItem.anime.id.toString());
         batch.set(docRef, anilistItem);
       }
-
-      // 4. Delete items from Firestore that are no longer on AniList
       for (const firestoreItem of firestoreItems) {
         if (!anilistMap.has(firestoreItem.anime.id)) {
           const docRef = doc(watchlistRef, firestoreItem.anime.id.toString());
@@ -339,20 +337,48 @@ export default function App() {
         }
       }
 
-      // 5. Commit all changes at once
       await batch.commit();
+      lastSyncTimestamp.current = Date.now();
 
     } catch (err) {
-      console.error("Force sync failed:", err);
+      console.error("Automatic sync failed:", err);
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred while syncing.";
-      setSyncError(`Sync failed: ${errorMessage}`);
+      setSyncError(`Auto-sync failed: ${errorMessage}`);
     } finally {
-      setIsFullSyncing(false);
+      setIsBackgroundSyncing(false);
     }
-  }, [userProfile, anilistProfile]);
+  }, [userProfile, anilistProfile, isBackgroundSyncing]);
+  
+  // Effect for initial load/profile change
+  useEffect(() => {
+    if (anilistProfile) {
+      syncAniListWatchlist();
+    }
+  }, [anilistProfile, syncAniListWatchlist]);
+
+  // Effect for tab visibility and periodic sync
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncAniListWatchlist();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        syncAniListWatchlist();
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalId);
+    };
+  }, [syncAniListWatchlist]);
   
   const watchlistMap = useMemo(() => new Map(watchlist.map(item => [item.anime.id, item])), [watchlist]);
-  const anySyncing = isWatchlistLoading || syncingIds.size > 0 || isFullSyncing;
+  const anySyncing = isWatchlistLoading || syncingIds.size > 0 || isBackgroundSyncing;
 
   const renderContent = () => {
       if (!userProfile) {
@@ -395,9 +421,6 @@ export default function App() {
                 onRemoveFromWatchlist={handleRemoveFromWatchlist}
                 onCardClick={handleSelectAnime}
                 syncingIds={syncingIds}
-                onForceSync={handleForceSync}
-                isSyncing={isFullSyncing}
-                isAnilistLinked={!!anilistProfile}
               />
             )}
             {view === 'overview' && <GenreOverview watchlist={watchlist} />}
