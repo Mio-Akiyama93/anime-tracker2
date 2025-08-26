@@ -1,0 +1,17 @@
+{
+  "name": "Anime Tracker",
+  "short_name": "AnimeTracker",
+  "description": "A web application to search for anime and manage your personal watchlist.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Anime Tracker2",
+  "description": "A web application to search for anime and manage your personal watchlist.",
+  "requestFramePermissions": []
+}
