@@ -1,8 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { WatchlistItem } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const recommendationSchema = {
     type: Type.ARRAY,
     items: {
@@ -22,6 +20,13 @@ const recommendationSchema = {
 };
 
 export async function getAIRecommendations(watchlist: WatchlistItem[]): Promise<{ title: string, reason: string }[]> {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        // Prevents the app from crashing on load and provides a clear error in the UI when the feature is used.
+        throw new Error("AI features are disabled. The VITE_GEMINI_API_KEY is missing from your app's configuration.");
+    }
+    const ai = new GoogleGenAI({ apiKey });
+
     if (watchlist.length === 0) {
         throw new Error("Watchlist is empty. Cannot generate recommendations.");
     }
