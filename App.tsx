@@ -121,6 +121,7 @@ export default function App() {
   const [friendProfile, setFriendProfile] = useState<UserProfile | null>(null);
   const [friendWatchlist, setFriendWatchlist] = useState<WatchlistItem[]>([]);
   const [isFetchingFriendData, setIsFetchingFriendData] = useState(false);
+  const [friendViewError, setFriendViewError] = useState<string | null>(null);
 
 
   const isInitialSyncing = useRef(false);
@@ -390,7 +391,7 @@ export default function App() {
     setSelectedAnime(null);
     setViewingFriend(friend);
     setIsFetchingFriendData(true);
-    setError(null);
+    setFriendViewError(null);
     try {
         const friendProfileDoc = await getDoc(doc(db, 'users', friend.uid));
         if (friendProfileDoc.exists()) {
@@ -403,8 +404,7 @@ export default function App() {
         const watchlistData = friendWatchlistSnap.docs.map(doc => doc.data() as WatchlistItem);
         setFriendWatchlist(watchlistData);
     } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load friend's data.");
-        setViewingFriend(null);
+        setFriendViewError(err instanceof Error ? err.message : "Failed to load friend's data.");
     } finally {
         setIsFetchingFriendData(false);
     }
@@ -414,6 +414,7 @@ export default function App() {
       setViewingFriend(null);
       setFriendProfile(null);
       setFriendWatchlist([]);
+      setFriendViewError(null);
   };
   
   const watchlistMap = useMemo(() => new Map(watchlist.map(item => [item.anime.id, item])), [watchlist]);
@@ -478,6 +479,7 @@ export default function App() {
                     friendProfile={friendProfile}
                     friendWatchlist={friendWatchlist}
                     isLoading={isFetchingFriendData}
+                    error={friendViewError}
                     onClose={handleCloseFriendView}
                     onSelectAnime={handleSelectAnime}
                     currentUserWatchlistMap={watchlistMap}

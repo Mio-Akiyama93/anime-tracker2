@@ -20,6 +20,7 @@ export const FriendProfile: React.FC<{
     friendProfile: UserProfile | null;
     friendWatchlist: WatchlistItem[];
     isLoading: boolean;
+    error: string | null;
     onClose: () => void;
     onSelectAnime: (anime: Anime) => void;
     currentUserWatchlistMap: Map<number, WatchlistItem>;
@@ -30,6 +31,7 @@ export const FriendProfile: React.FC<{
     friendProfile,
     friendWatchlist,
     isLoading,
+    error,
     onClose,
     onSelectAnime,
     currentUserWatchlistMap,
@@ -40,6 +42,27 @@ export const FriendProfile: React.FC<{
         return (
             <div className="flex justify-center items-center py-20">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-brand-primary"></div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="animate-fade-in">
+                <div className="flex items-center gap-4 mb-6">
+                     <button 
+                        onClick={onClose} 
+                        className="bg-brand-bg-light p-2 rounded-full hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-accent"
+                        aria-label="Go back to friends list"
+                    >
+                        <ArrowLeftIcon className="w-6 h-6" />
+                    </button>
+                    <h1 className="text-3xl font-bold text-red-400">Error</h1>
+                </div>
+                <div className="text-center py-20 bg-brand-bg-light rounded-lg">
+                    <p className="text-red-400">{`Could not load profile for ${friend.displayName}:`}</p>
+                    <p className="text-red-300 mt-2">{error}</p>
+                </div>
             </div>
         );
     }
