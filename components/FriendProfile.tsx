@@ -18,7 +18,7 @@ const FriendProfileSummary: React.FC<{ friend: Friend, profile: UserProfile | nu
 export const FriendProfile: React.FC<{
     friend: Friend;
     friendProfile: UserProfile | null;
-    friendWatchlist: WatchlistItem[];
+    friendWatchlist: WatchlistItem[] | null;
     isLoading: boolean;
     error: string | null;
     onClose: () => void;
@@ -77,19 +77,27 @@ export const FriendProfile: React.FC<{
                 >
                     <ArrowLeftIcon className="w-6 h-6" />
                 </button>
-                <h1 className="text-3xl font-bold">{friend.displayName}'s Watchlist</h1>
+                <h1 className="text-3xl font-bold">{friend.displayName}'s Profile</h1>
             </div>
             
             <FriendProfileSummary friend={friend} profile={friendProfile} />
 
-            <Watchlist
-                watchlist={friendWatchlist}
-                onCardClick={onSelectAnime}
-                isReadOnly={true}
-                currentUserWatchlistMap={currentUserWatchlistMap}
-                onUpdateStatus={onAddToCurrentUserWatchlist}
-                syncingIds={syncingIds}
-            />
+            {friendWatchlist ? (
+                <Watchlist
+                    watchlist={friendWatchlist}
+                    onCardClick={onSelectAnime}
+                    isReadOnly={true}
+                    currentUserWatchlistMap={currentUserWatchlistMap}
+                    onUpdateStatus={onAddToCurrentUserWatchlist}
+                    syncingIds={syncingIds}
+                />
+            ) : (
+                <div className="text-center py-20 bg-brand-bg-light rounded-lg mt-8">
+                    <UserIcon className="w-16 h-16 mx-auto text-brand-text-muted" />
+                    <h2 className="mt-4 text-2xl font-semibold">Watchlist is Private</h2>
+                    <p className="mt-2 text-brand-text-muted">This user's watchlist cannot be viewed due to their privacy settings.</p>
+                </div>
+            )}
         </div>
     );
 };

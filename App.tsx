@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { Anime, WatchlistItem, WatchStatus, User, Friend, UserProfile } from './types';
 import { searchAnime, getWatchlist, saveWatchlistItem, deleteWatchlistItem } from './services/anilistService';
 import { useAuth } from './hooks/useAuth';
@@ -119,7 +119,7 @@ export default function App() {
   // State for viewing friend's profile
   const [viewingFriend, setViewingFriend] = useState<Friend | null>(null);
   const [friendProfile, setFriendProfile] = useState<UserProfile | null>(null);
-  const [friendWatchlist, setFriendWatchlist] = useState<WatchlistItem[]>([]);
+  const [friendWatchlist, setFriendWatchlist] = useState<WatchlistItem[] | null>([]);
   const [isFetchingFriendData, setIsFetchingFriendData] = useState(false);
   const [friendViewError, setFriendViewError] = useState<string | null>(null);
 
@@ -392,19 +392,33 @@ export default function App() {
     setViewingFriend(friend);
     setIsFetchingFriendData(true);
     setFriendViewError(null);
+    setFriendProfile(null);
+    setFriendWatchlist([]); // Reset to empty array for loading state
+
     try {
-        const friendProfileDoc = await getDoc(doc(db, 'users', friend.uid));
-        if (friendProfileDoc.exists()) {
-            setFriendProfile(friendProfileDoc.data() as UserProfile);
+        // Fetch profile using a query, which is allowed by the security rules
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('uid', '==', friend.uid));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+            setFriendProfile(querySnapshot.docs[0].data() as UserProfile);
         } else {
             throw new Error("Could not find friend's profile.");
         }
-        const friendWatchlistRef = collection(db, 'users', friend.uid, 'watchlist');
-        const friendWatchlistSnap = await getDocs(friendWatchlistRef);
-        const watchlistData = friendWatchlistSnap.docs.map(doc => doc.data() as WatchlistItem);
-        setFriendWatchlist(watchlistData);
-    } catch (err) {
-        setFriendViewError(err instanceof Error ? err.message : "Failed to load friend's data.");
+
+        // Attempt to fetch watchlist. This is expected to fail with current rules.
+        try {
+            const friendWatchlistRef = collection(db, 'users', friend.uid, 'watchlist');
+            const friendWatchlistSnap = await getDocs(friendWatchlistRef);
+            const watchlistData = friendWatchlistSnap.docs.map(doc => doc.data() as WatchlistItem);
+            setFriendWatchlist(watchlistData);
+        } catch (watchlistError) {
+            console.warn(`Could not fetch friend's watchlist due to permissions:`, watchlistError);
+            setFriendWatchlist(null); // Set to null to indicate a failed fetch
+        }
+    } catch (profileError) {
+        setFriendViewError(profileError instanceof Error ? profileError.message : "Failed to load friend's data.");
     } finally {
         setIsFetchingFriendData(false);
     }
