@@ -11,10 +11,11 @@ import { GenreOverview } from './components/GenreOverview';
 import { Profile } from './components/Profile';
 import { Recommendations } from './components/Recommendations';
 import { Sync } from './components/Sync';
-import { TvIcon, SearchIcon, XMarkIcon, SparklesIcon, ChartBarIcon, UserIcon, UsersIcon } from './components/icons';
+import { TvIcon, SearchIcon, XMarkIcon, SparklesIcon, ChartBarIcon, UserIcon, UsersIcon, BellIcon } from './components/icons';
 import { Watchlist } from './components/Watchlist';
 import { Friends } from './components/Friends';
 import { FriendProfile } from './components/FriendProfile';
+import { Notifications } from './components/Notifications';
 
 type View = 'search' | 'watchlist' | 'overview' | 'profile' | 'recommendations' | 'sync' | 'friends';
 
@@ -22,7 +23,9 @@ const Header: React.FC<{
     currentView: View;
     onViewChange: (view: View) => void;
     isWatchlistSyncing?: boolean;
-}> = ({ currentView, onViewChange, isWatchlistSyncing }) => {
+    unreadNotifications: number;
+    onOpenNotifications: () => void;
+}> = ({ currentView, onViewChange, isWatchlistSyncing, unreadNotifications, onOpenNotifications }) => {
     const { userProfile, anilistProfile, logout } = useAuth();
     
     return (
@@ -51,15 +54,24 @@ const Header: React.FC<{
                     <button onClick={() => onViewChange('sync')} className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${currentView === 'sync' ? 'bg-brand-secondary text-white' : 'text-brand-text-muted hover:bg-brand-bg-light'}`}>Sync</button>
                     <button onClick={() => onViewChange('profile')} className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${currentView === 'profile' ? 'bg-brand-secondary text-white' : 'text-brand-text-muted hover:bg-brand-bg-light'}`}>Profile</button>
                 </nav>
-                <div className="hidden md:flex items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-4">
                     {userProfile && (
                         <>
+                            <button onClick={onOpenNotifications} className="relative p-2 rounded-full text-brand-text-muted hover:text-white hover:bg-brand-bg-light transition-colors" aria-label="Open notifications">
+                                <BellIcon className="w-6 h-6" />
+                                {unreadNotifications > 0 && (
+                                     <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-4 w-4 bg-brand-primary text-white text-[10px] items-center justify-center">{unreadNotifications}</span>
+                                    </span>
+                                )}
+                            </button>
                             {anilistProfile ? (
                                 <img src={anilistProfile.avatar.large} alt={anilistProfile.name} className="w-10 h-10 rounded-full" />
                             ) : (
                                 <UserIcon className="w-10 h-10 p-2 text-slate-400 bg-brand-bg-dark rounded-full" />
                             )}
-                             <div className="flex items-center gap-2">
+                             <div className="hidden sm:flex items-center gap-2">
                                 <span className="text-sm font-semibold">{userProfile.displayName}</span>
                                 <button onClick={logout} className="text-sm font-semibold text-brand-text-muted hover:text-white">Logout</button>
                              </div>
@@ -104,7 +116,7 @@ const BottomNavBar: React.FC<{
 };
 
 export default function App() {
-  const { userProfile, anilistProfile, isLoading: isAuthLoading } = useAuth();
+  const { userProfile, anilistProfile, isLoading: isAuthLoading, notifications, markNotificationsAsRead } = useAuth();
   const [searchResults, setSearchResults] = useState<Anime[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +127,7 @@ export default function App() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncingIds, setSyncingIds] = useState(new Set<number>());
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   // State for viewing friend's profile
   const [viewingFriend, setViewingFriend] = useState<Friend | null>(null);
@@ -431,6 +444,19 @@ export default function App() {
       setFriendViewError(null);
   };
   
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+
+  const handleOpenNotifications = () => {
+      setIsNotificationsOpen(true);
+      if (unreadCount > 0) {
+          markNotificationsAsRead();
+      }
+  };
+
+  const handleCloseNotifications = () => {
+      setIsNotificationsOpen(false);
+  };
+
   const watchlistMap = useMemo(() => new Map(watchlist.map(item => [item.anime.id, item])), [watchlist]);
   const anySyncing = isWatchlistLoading || syncingIds.size > 0 || isBackgroundSyncing;
 
@@ -531,7 +557,7 @@ export default function App() {
             </div>
         ) : (
             <>
-                {userProfile && <Header currentView={view} onViewChange={setView} isWatchlistSyncing={anySyncing} />}
+                {userProfile && <Header currentView={view} onViewChange={setView} isWatchlistSyncing={anySyncing} unreadNotifications={unreadCount} onOpenNotifications={handleOpenNotifications} />}
                 {renderContent()}
                 {userProfile && <BottomNavBar currentView={view} onViewChange={setView} />}
                 
@@ -541,6 +567,25 @@ export default function App() {
                         <button onClick={() => setSyncError(null)} aria-label="Dismiss error">
                             <XMarkIcon className="w-5 h-5"/>
                         </button>
+                    </div>
+                )}
+
+                {isNotificationsOpen && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={handleCloseNotifications} role="dialog" aria-modal="true" aria-labelledby="notifications-title">
+                        <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute top-16 right-4 sm:right-8 w-full max-w-sm bg-brand-bg-light rounded-lg shadow-2xl overflow-hidden animate-fade-in"
+                        >
+                            <div className="p-4 flex justify-between items-center border-b border-slate-700">
+                                <h2 id="notifications-title" className="text-lg font-bold">Notifications</h2>
+                                <button onClick={handleCloseNotifications} aria-label="Close notifications">
+                                    <XMarkIcon className="w-6 h-6 text-brand-text-muted hover:text-white" />
+                                </button>
+                            </div>
+                            <div className="max-h-[60vh] overflow-y-auto">
+                                <Notifications />
+                            </div>
+                        </div>
                     </div>
                 )}
             </>

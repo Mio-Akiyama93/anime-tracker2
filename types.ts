@@ -109,3 +109,19 @@ export interface AIRecommendation {
   title: string;
   reason: string;
 }
+
+export enum NotificationType {
+  FriendRequest = 'FRIEND_REQUEST',
+  FriendAccept = 'FRIEND_ACCEPT',
+}
+
+export interface AppNotification {
+  id: string; // Firestore document ID
+  uid: string; // User this notification belongs to
+  type: NotificationType;
+  message: string;
+  fromUid?: string; // UID of user who triggered it, if applicable
+  fromName?: string;
+  timestamp: any; // Firestore Timestamp
+  read: boolean;
+}

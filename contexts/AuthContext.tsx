@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc, writeBatch, onSnapshot, Unsubscribe, collectionGroup, orderBy } from 'firebase/firestore';
-import { User as AnilistUser, UserProfile, Friend, FriendRequest } from '../types';
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc, writeBatch, onSnapshot, Unsubscribe, collectionGroup, orderBy, serverTimestamp } from 'firebase/firestore';
+import { User as AnilistUser, UserProfile, Friend, FriendRequest, AppNotification, NotificationType } from '../types';
 import { getViewerProfile } from '../services/anilistService';
 import { auth, db } from '../services/firebase';
 
@@ -12,6 +12,7 @@ interface AuthContextType {
   friends: Friend[];
   incomingRequests: FriendRequest[];
   outgoingRequests: FriendRequest[];
+  notifications: AppNotification[];
   isLoading: boolean;
   error: string | null;
   register: (name: string, email: string, password: string) => Promise<void>;
@@ -24,6 +25,7 @@ interface AuthContextType {
   respondToFriendRequest: (request: FriendRequest, accept: boolean) => Promise<void>;
   cancelFriendRequest: (request: FriendRequest) => Promise<void>;
   removeFriend: (friend: Friend) => Promise<void>;
+  markNotificationsAsRead: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,6 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [friends, setFriends] = useState<Friend[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -81,6 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setFriends([]);
             setIncomingRequests([]);
             setOutgoingRequests([]);
+            setNotifications([]);
         }
         setIsLoading(false);
     });
@@ -110,10 +114,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOutgoingRequests(requests);
     });
 
+    const notifsRef = collection(db, 'users', userProfile.uid, 'notifications');
+    const notifsQuery = query(notifsRef, orderBy('timestamp', 'desc'));
+    const notifsUnsub = onSnapshot(notifsQuery, (snapshot) => {
+        const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
+        setNotifications(notifs);
+    });
+
     return () => {
         friendsUnsub();
         incomingUnsub();
         outgoingUnsub();
+        notifsUnsub();
     }
   }, [userProfile]);
 
@@ -219,6 +231,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           toName: toUser.displayName,
       };
       await addDoc(collection(db, 'friendRequests'), newRequest);
+      
+      const notificationRef = collection(db, 'users', toUser.uid, 'notifications');
+      await addDoc(notificationRef, {
+        uid: toUser.uid,
+        type: NotificationType.FriendRequest,
+        message: `${userProfile.displayName} sent you a friend request.`,
+        fromUid: userProfile.uid,
+        fromName: userProfile.displayName,
+        timestamp: serverTimestamp(),
+        read: false,
+      });
   };
   
   const respondToFriendRequest = async (request: FriendRequest, accept: boolean) => {
@@ -235,6 +258,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           batch.set(otherUserFriendRef, { displayName: userProfile.displayName });
           
           await batch.commit();
+          
+          const notificationRef = collection(db, 'users', request.fromUid, 'notifications');
+          await addDoc(notificationRef, {
+            uid: request.fromUid,
+            type: NotificationType.FriendAccept,
+            message: `${userProfile.displayName} accepted your friend request.`,
+            fromUid: userProfile.uid,
+            fromName: userProfile.displayName,
+            timestamp: serverTimestamp(),
+            read: false,
+          });
       }
   };
 
@@ -254,9 +288,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       await batch.commit();
   };
+  
+  const markNotificationsAsRead = async () => {
+    if (!userProfile) return;
+    const unreadNotifications = notifications.filter(n => !n.read);
+    if (unreadNotifications.length === 0) return;
+
+    const batch = writeBatch(db);
+    unreadNotifications.forEach(notif => {
+        const notifRef = doc(db, 'users', userProfile.uid, 'notifications', notif.id);
+        batch.update(notifRef, { read: true });
+    });
+    await batch.commit();
+  };
 
 
-  const value = { currentUser, userProfile, anilistProfile, friends, incomingRequests, outgoingRequests, isLoading, error, register, login, logout, linkAnilist, unlinkAnilist, searchUsers, sendFriendRequest, respondToFriendRequest, cancelFriendRequest, removeFriend };
+  const value = { currentUser, userProfile, anilistProfile, friends, incomingRequests, outgoingRequests, notifications, isLoading, error, register, login, logout, linkAnilist, unlinkAnilist, searchUsers, sendFriendRequest, respondToFriendRequest, cancelFriendRequest, removeFriend, markNotificationsAsRead };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
