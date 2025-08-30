@@ -95,10 +95,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!userProfile) return;
 
     let unsubscribers: Unsubscribe[] = [];
-
-    const friendsRef = collection(db, 'users', userProfile.uid, 'friends');
-    unsubscribers.push(onSnapshot(friendsRef, (snapshot) => {
-        const friendsList = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Friend));
+    
+    // Listen to friendships from the new top-level collection
+    const friendshipsRef = collection(db, 'friendships');
+    const friendshipsQuery = query(friendshipsRef, where('uids', 'array-contains', userProfile.uid));
+    unsubscribers.push(onSnapshot(friendshipsQuery, (snapshot) => {
+        const friendsList = snapshot.docs.map(doc => {
+            const data = doc.data();
+            const friendUid = data.uids.find((uid: string) => uid !== userProfile.uid);
+            const friendData = data.users[friendUid];
+            return {
+                uid: friendUid,
+                displayName: friendData.displayName,
+                friendshipId: doc.id
+            } as Friend;
+        });
         setFriends(friendsList);
     }));
     
@@ -268,18 +279,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const respondToFriendRequest = async (request: FriendRequest, accept: boolean) => {
       if (!userProfile) throw new Error("You must be logged in.");
 
+      // Always delete the request regardless of acceptance
       await deleteDoc(doc(db, 'friendRequests', request.id));
 
       if (accept) {
-          const batch = writeBatch(db);
-          const currentUserFriendRef = doc(db, `users/${userProfile.uid}/friends`, request.fromUid);
-          batch.set(currentUserFriendRef, { displayName: request.fromName, uid: request.fromUid });
-
-          const otherUserFriendRef = doc(db, `users/${request.fromUid}/friends`, userProfile.uid);
-          batch.set(otherUserFriendRef, { displayName: userProfile.displayName, uid: userProfile.uid });
+          // Create a single friendship document in the top-level collection
+          const friendshipId = [userProfile.uid, request.fromUid].sort().join('_');
+          const friendshipRef = doc(db, 'friendships', friendshipId);
           
-          await batch.commit();
+          await setDoc(friendshipRef, {
+              uids: [userProfile.uid, request.fromUid],
+              users: {
+                  [userProfile.uid]: { displayName: userProfile.displayName },
+                  [request.fromUid]: { displayName: request.fromName }
+              },
+              createdAt: serverTimestamp()
+          });
           
+          // Send a notification to the user who sent the request
           const notificationRef = collection(db, 'notifications');
           await addDoc(notificationRef, {
             uid: request.fromUid,
@@ -299,15 +316,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const removeFriend = async (friend: Friend) => {
       if (!userProfile) throw new Error("You must be logged in.");
-
-      const batch = writeBatch(db);
-      const currentUserFriendRef = doc(db, `users/${userProfile.uid}/friends`, friend.uid);
-      batch.delete(currentUserFriendRef);
-
-      const otherUserFriendRef = doc(db, `users/${friend.uid}/friends`, userProfile.uid);
-      batch.delete(otherUserFriendRef);
+      if (!friend.friendshipId) {
+        console.error("Attempted to remove friend without friendshipId", friend);
+        throw new Error("Cannot remove friend, data is inconsistent.");
+      }
       
-      await batch.commit();
+      const friendshipRef = doc(db, 'friendships', friend.friendshipId);
+      await deleteDoc(friendshipRef);
   };
   
   const markNotificationsAsRead = async () => {

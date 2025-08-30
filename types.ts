@@ -102,6 +102,7 @@ export interface UserProfile {
 export interface Friend {
     uid: string;
     displayName: string;
+    friendshipId: string;
 }
 
 
