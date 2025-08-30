@@ -114,8 +114,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOutgoingRequests(requests);
     });
 
-    const notifsRef = collection(db, 'users', userProfile.uid, 'notifications');
-    const notifsQuery = query(notifsRef, orderBy('timestamp', 'desc'));
+    const notifsRef = collection(db, 'notifications');
+    const notifsQuery = query(notifsRef, where('uid', '==', userProfile.uid), orderBy('timestamp', 'desc'));
     const notifsUnsub = onSnapshot(notifsQuery, (snapshot) => {
         const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
         setNotifications(notifs);
@@ -229,10 +229,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fromName: userProfile.displayName,
           toUid: toUser.uid,
           toName: toUser.displayName,
+          timestamp: serverTimestamp(),
       };
       await addDoc(collection(db, 'friendRequests'), newRequest);
       
-      const notificationRef = collection(db, 'users', toUser.uid, 'notifications');
+      const notificationRef = collection(db, 'notifications');
       await addDoc(notificationRef, {
         uid: toUser.uid,
         type: NotificationType.FriendRequest,
@@ -259,7 +260,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           await batch.commit();
           
-          const notificationRef = collection(db, 'users', request.fromUid, 'notifications');
+          const notificationRef = collection(db, 'notifications');
           await addDoc(notificationRef, {
             uid: request.fromUid,
             type: NotificationType.FriendAccept,
@@ -296,7 +297,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const batch = writeBatch(db);
     unreadNotifications.forEach(notif => {
-        const notifRef = doc(db, 'users', userProfile.uid, 'notifications', notif.id);
+        const notifRef = doc(db, 'notifications', notif.id);
         batch.update(notifRef, { read: true });
     });
     await batch.commit();
