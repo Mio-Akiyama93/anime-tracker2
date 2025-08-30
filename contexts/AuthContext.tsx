@@ -94,38 +94,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!userProfile) return;
 
+    let unsubscribers: Unsubscribe[] = [];
+
     const friendsRef = collection(db, 'users', userProfile.uid, 'friends');
-    const friendsUnsub = onSnapshot(friendsRef, (snapshot) => {
+    unsubscribers.push(onSnapshot(friendsRef, (snapshot) => {
         const friendsList = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Friend));
         setFriends(friendsList);
-    });
+    }));
     
     const incomingReqRef = collection(db, 'friendRequests');
     const incomingQuery = query(incomingReqRef, where('toUid', '==', userProfile.uid));
-    const incomingUnsub = onSnapshot(incomingQuery, (snapshot) => {
+    unsubscribers.push(onSnapshot(incomingQuery, (snapshot) => {
         const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
         setIncomingRequests(requests);
-    });
+    }));
 
     const outgoingReqRef = collection(db, 'friendRequests');
     const outgoingQuery = query(outgoingReqRef, where('fromUid', '==', userProfile.uid));
-    const outgoingUnsub = onSnapshot(outgoingQuery, (snapshot) => {
+    unsubscribers.push(onSnapshot(outgoingQuery, (snapshot) => {
         const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
         setOutgoingRequests(requests);
-    });
+    }));
 
     const notifsRef = collection(db, 'notifications');
     const notifsQuery = query(notifsRef, where('uid', '==', userProfile.uid), orderBy('timestamp', 'desc'));
-    const notifsUnsub = onSnapshot(notifsQuery, (snapshot) => {
+    unsubscribers.push(onSnapshot(notifsQuery, (snapshot) => {
         const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
         setNotifications(notifs);
-    });
+    }, (err) => {
+        console.error("Notification listener failed:", err);
+        // This can happen if the required index isn't created yet.
+        // We don't want to crash the app, just log the error.
+    }));
 
     return () => {
-        friendsUnsub();
-        incomingUnsub();
-        outgoingUnsub();
-        notifsUnsub();
+        unsubscribers.forEach(unsub => unsub());
     }
   }, [userProfile]);
 
@@ -223,6 +226,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const sendFriendRequest = async (toUser: UserProfile) => {
       if (!userProfile) throw new Error("You must be logged in.");
+
+      // Prevent sending duplicate requests
+      const requestsRef = collection(db, 'friendRequests');
+      const q1 = query(requestsRef, where('fromUid', '==', userProfile.uid), where('toUid', '==', toUser.uid));
+      const q2 = query(requestsRef, where('fromUid', '==', toUser.uid), where('toUid', '==', userProfile.uid));
+
+      const [existingRequestSnap, incomingRequestSnap] = await Promise.all([
+          getDocs(q1),
+          getDocs(q2),
+      ]);
+
+      if (!existingRequestSnap.empty) {
+          throw new Error("A friend request has already been sent to this user.");
+      }
+      if (!incomingRequestSnap.empty) {
+          throw new Error("This user has already sent you a friend request. Check your incoming requests.");
+      }
       
       const newRequest = {
           fromUid: userProfile.uid,
@@ -253,10 +273,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (accept) {
           const batch = writeBatch(db);
           const currentUserFriendRef = doc(db, `users/${userProfile.uid}/friends`, request.fromUid);
-          batch.set(currentUserFriendRef, { displayName: request.fromName });
+          batch.set(currentUserFriendRef, { displayName: request.fromName, uid: request.fromUid });
 
           const otherUserFriendRef = doc(db, `users/${request.fromUid}/friends`, userProfile.uid);
-          batch.set(otherUserFriendRef, { displayName: userProfile.displayName });
+          batch.set(otherUserFriendRef, { displayName: userProfile.displayName, uid: userProfile.uid });
           
           await batch.commit();
           
