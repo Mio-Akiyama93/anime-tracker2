@@ -150,9 +150,12 @@ export default function App() {
   // Handle public profile routing on initial load
   useEffect(() => {
     const path = window.location.pathname;
-    const match = path.match(/^\/@(\w+)$/);
+    // FIX: Updated regex to support display names with spaces and other special characters.
+    // The previous regex `\w+` only allowed letters, numbers, and underscores.
+    const match = path.match(/^\/@([^/]+)$/);
 
     if (match) {
+      // The matched part of a pathname is already URL-decoded by the browser.
       const displayName = match[1];
       const loadPublicProfile = async () => {
         try {

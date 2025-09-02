@@ -67,6 +67,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const userSnap = await getDoc(userRef);
             if(userSnap.exists()) {
                 const profileData = userSnap.data() as UserProfile;
+                
+                // Backwards compatibility: Add displayName_lowercase if it's missing.
+                // This ensures older accounts work with the public profile feature.
+                if (!profileData.displayName_lowercase && profileData.displayName) {
+                    profileData.displayName_lowercase = profileData.displayName.toLowerCase();
+                    await updateDoc(userRef, { 
+                        displayName_lowercase: profileData.displayName_lowercase 
+                    });
+                }
+
                 setUserProfile(profileData);
                 if (profileData.anilistToken) {
                     await verifyAnilistToken(profileData.anilistToken, user);
