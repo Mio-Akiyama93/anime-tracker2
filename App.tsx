@@ -155,8 +155,9 @@ export default function App() {
     const match = path.match(/^\/@([^/]+)$/);
 
     if (match) {
-      // The matched part of a pathname is already URL-decoded by the browser.
-      const displayName = match[1];
+      // FIX: The display name from the URL path can be URL-encoded (e.g., spaces as %20).
+      // We must decode it to match the value stored in Firestore.
+      const displayName = decodeURIComponent(match[1]);
       const loadPublicProfile = async () => {
         try {
           const profile = await getUserProfileByDisplayName(displayName);
