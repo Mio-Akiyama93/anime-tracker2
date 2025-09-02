@@ -508,6 +508,7 @@ export default function App() {
                 watchlistMap={watchlistMap}
                 onAddToWatchlist={handleAddToWatchlist}
                 onSelectAnime={handleSelectAnime}
+                syncingIds={syncingIds}
               />
             )}
             {view === 'friends' && (
@@ -525,7 +526,14 @@ export default function App() {
                     syncingIds={syncingIds}
                 />
               ) : (
-                <Friends onViewFriend={handleViewFriend} />
+                <Friends 
+                    onViewFriend={handleViewFriend} 
+                    currentUserWatchlist={watchlist}
+                    onAddToWatchlist={handleAddToWatchlist}
+                    onSelectAnime={handleSelectAnime}
+                    watchlistMap={watchlistMap}
+                    syncingIds={syncingIds}
+                />
               )
             )}
             {view === 'sync' && (

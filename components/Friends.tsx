@@ -1,15 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { UserProfile, FriendRequest, Friend } from '../types';
-import { SearchIcon, UserIcon, XMarkIcon, CheckIcon, PlusIcon } from './icons';
+import { UserProfile, FriendRequest, Friend, WatchlistItem, Anime, WatchStatus } from '../types';
+import { SearchIcon, UserIcon, XMarkIcon, CheckIcon, PlusIcon, SparklesIcon } from './icons';
+import { JointRecommendations } from './JointRecommendations';
 
 type FriendsView = 'list' | 'add' | 'requests';
 
 interface FriendsProps {
     onViewFriend: (friend: Friend) => void;
+    currentUserWatchlist: WatchlistItem[];
+    onAddToWatchlist: (anime: Anime, status: WatchStatus) => void;
+    onSelectAnime: (anime: Anime) => void;
+    watchlistMap: Map<number, WatchlistItem>;
+    syncingIds: Set<number>;
 }
 
-export const Friends: React.FC<FriendsProps> = ({ onViewFriend }) => {
+export const Friends: React.FC<FriendsProps> = ({ onViewFriend, currentUserWatchlist, onAddToWatchlist, onSelectAnime, watchlistMap, syncingIds }) => {
     const { userProfile, friends, incomingRequests, outgoingRequests, searchUsers, sendFriendRequest, respondToFriendRequest, cancelFriendRequest, removeFriend } = useAuth();
     const [view, setView] = useState<FriendsView>('list');
     const [searchQuery, setSearchQuery] = useState('');
@@ -17,6 +23,8 @@ export const Friends: React.FC<FriendsProps> = ({ onViewFriend }) => {
     const [isSearching, setIsSearching] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [syncUpFriend, setSyncUpFriend] = useState<Friend | null>(null);
+
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -83,13 +91,23 @@ export const Friends: React.FC<FriendsProps> = ({ onViewFriend }) => {
                                             <UserIcon className="w-8 h-8 p-1 bg-brand-bg-dark rounded-full text-slate-400 flex-shrink-0" />
                                             <span className="font-semibold">{friend.displayName}</span>
                                         </button>
-                                        <button 
-                                            onClick={() => handleAction(() => removeFriend(friend))}
-                                            disabled={actionLoading}
-                                            className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 flex-shrink-0 ml-4"
-                                        >
-                                            Unfriend
-                                        </button>
+                                        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                                            <button
+                                                onClick={() => setSyncUpFriend(friend)}
+                                                className="p-2 bg-brand-primary text-white rounded-md hover:bg-indigo-500 transition-colors"
+                                                title="Get joint recommendations"
+                                                aria-label={`Get joint recommendations with ${friend.displayName}`}
+                                            >
+                                                <SparklesIcon className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleAction(() => removeFriend(friend))}
+                                                disabled={actionLoading}
+                                                className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                                            >
+                                                Unfriend
+                                            </button>
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -180,6 +198,19 @@ export const Friends: React.FC<FriendsProps> = ({ onViewFriend }) => {
                 );
         }
     };
+
+    if (syncUpFriend && userProfile) {
+        return <JointRecommendations 
+                    friend={syncUpFriend} 
+                    userProfile={userProfile}
+                    currentUserWatchlist={currentUserWatchlist}
+                    onClose={() => setSyncUpFriend(null)}
+                    onAddToWatchlist={onAddToWatchlist}
+                    onSelectAnime={onSelectAnime}
+                    watchlistMap={watchlistMap}
+                    syncingIds={syncingIds}
+                />
+    }
     
     return (
         <div className="max-w-4xl mx-auto">
