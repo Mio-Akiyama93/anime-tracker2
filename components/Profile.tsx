@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { WatchStatus, WatchlistItem } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { ChikaraIcon, UserIcon } from './icons';
+import { ChikaraIcon, UserIcon, LinkIcon, CheckIcon } from './icons';
 
 const statusConfig: Record<WatchStatus, { label: string; color: string }> = {
   [WatchStatus.Watching]: { label: 'Watching', color: '#0ea5e9' }, // sky-500
@@ -106,6 +106,17 @@ interface ProfileProps {
 
 export const Profile: React.FC<ProfileProps> = ({ watchlist }) => {
     const { anilistProfile, userProfile, friends } = useAuth();
+    const [copied, setCopied] = useState(false);
+
+    const handleCopyLink = () => {
+        if (!userProfile) return;
+        const url = `${window.location.origin}/@${userProfile.displayName}`;
+        navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => {
+            setCopied(false);
+        }, 2000);
+    };
 
     const stats = useMemo(() => {
         const watchlistStatusCounts = new Map<WatchStatus, number>();
@@ -161,6 +172,18 @@ export const Profile: React.FC<ProfileProps> = ({ watchlist }) => {
                          <p className="text-sm text-brand-accent font-semibold mt-1">Not Synced with AniList</p>
                     </>
                 )}
+                <div className="mt-4">
+                    <button
+                        onClick={handleCopyLink}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-brand-bg-dark rounded-full hover:bg-slate-700 transition-colors"
+                    >
+                        {copied ? (
+                            <> <CheckIcon className="w-4 h-4 text-emerald-400" /> Copied! </>
+                        ) : (
+                            <> <LinkIcon className="w-4 h-4" /> Share Profile </>
+                        )}
+                    </button>
+                </div>
             </div>
             
             <hr className="border-slate-700 my-6" />

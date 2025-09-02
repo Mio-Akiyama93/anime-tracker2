@@ -147,6 +147,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     setError(null);
     try {
+      // Check for display name uniqueness
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("displayName_lowercase", "==", displayName.toLowerCase()));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+          throw new Error("Display name is already taken. Please choose another one.");
+      }
+      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       await updateProfile(user, { displayName });

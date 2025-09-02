@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query, where, getDoc } from 'firebase/firestore';
 import { Anime, WatchlistItem, WatchStatus, User, Friend, UserProfile } from './types';
 import { searchAnime, getWatchlist, saveWatchlistItem, deleteWatchlistItem } from './services/anilistService';
+import { getUserProfileByDisplayName, getWatchlistForUser } from './services/publicService';
 import { useAuth } from './hooks/useAuth';
 import { db } from './services/firebase';
 import { SearchBar } from './components/SearchBar';
@@ -16,6 +17,7 @@ import { Watchlist } from './components/Watchlist';
 import { Friends } from './components/Friends';
 import { FriendProfile } from './components/FriendProfile';
 import { Notifications } from './components/Notifications';
+import { PublicProfile } from './components/PublicProfile';
 
 type View = 'search' | 'watchlist' | 'overview' | 'profile' | 'recommendations' | 'sync' | 'friends';
 
@@ -121,13 +123,18 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [isWatchlistLoading, setIsWatchlistLoading] = useState(true);
+  const [isAppLoading, setIsAppLoading] = useState(true);
   const [view, setView] = useState<View>('profile');
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncingIds, setSyncingIds] = useState(new Set<number>());
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // State for public profile view
+  const [publicViewData, setPublicViewData] = useState<{ profile: UserProfile; watchlist: WatchlistItem[] } | null>(null);
+  const [isPublicViewLoading, setIsPublicViewLoading] = useState(true);
+  const [publicViewError, setPublicViewError] = useState<string | null>(null);
 
   // State for viewing friend's profile
   const [viewingFriend, setViewingFriend] = useState<Friend | null>(null);
@@ -140,25 +147,48 @@ export default function App() {
   const isInitialSyncing = useRef(false);
   const lastSyncTimestamp = useRef<number>(0);
 
+  // Handle public profile routing on initial load
+  useEffect(() => {
+    const path = window.location.pathname;
+    const match = path.match(/^\/@(\w+)$/);
+
+    if (match) {
+      const displayName = match[1];
+      const loadPublicProfile = async () => {
+        try {
+          const profile = await getUserProfileByDisplayName(displayName);
+          if (!profile) {
+            throw new Error('User not found.');
+          }
+          const watchlist = await getWatchlistForUser(profile.uid);
+          setPublicViewData({ profile, watchlist });
+        } catch (err) {
+          setPublicViewError(err instanceof Error ? err.message : 'Failed to load profile.');
+        } finally {
+          setIsPublicViewLoading(false);
+        }
+      };
+      loadPublicProfile();
+    } else {
+      setIsPublicViewLoading(false); // Not a public path, proceed with normal app loading
+    }
+  }, []);
+
   // Firestore real-time listener for watchlist
   useEffect(() => {
     if (!userProfile) {
         setWatchlist([]);
-        setIsWatchlistLoading(false);
         return;
     }
     
-    setIsWatchlistLoading(true);
     const watchlistRef = collection(db, 'users', userProfile.uid, 'watchlist');
     const q = query(watchlistRef);
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const userWatchlist = querySnapshot.docs.map(doc => doc.data() as WatchlistItem);
         setWatchlist(userWatchlist);
-        setIsWatchlistLoading(false);
     }, (err) => {
         console.error("Watchlist listener error: ", err);
         setError("Could not load your watchlist.");
-        setIsWatchlistLoading(false);
     });
 
     return () => unsubscribe();
@@ -167,7 +197,6 @@ export default function App() {
   const handleInitialSync = useCallback(async (firestoreWatchlist: WatchlistItem[], profile: User, token: string) => {
     if (!userProfile) return;
     isInitialSyncing.current = true;
-    setIsWatchlistLoading(true);
     setSyncError(null);
     try {
         const anilistWatchlist = await getWatchlist(profile.id, token);
@@ -193,11 +222,16 @@ export default function App() {
         setSyncError(`Failed to sync watchlist: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`);
         throw err;
     } finally {
-        setIsWatchlistLoading(false);
         isInitialSyncing.current = false;
     }
   }, [userProfile]);
 
+
+  // Determine overall app loading state
+  useEffect(() => {
+    // App is considered loaded when auth is checked AND it's not a public view path that's still loading.
+    if (!isAuthLoading && !isPublicViewLoading) setIsAppLoading(false);
+  }, [isAuthLoading, isPublicViewLoading]);
 
   useEffect(() => {
     if (!userProfile) {
@@ -456,7 +490,7 @@ export default function App() {
   };
 
   const watchlistMap = useMemo(() => new Map(watchlist.map(item => [item.anime.id, item])), [watchlist]);
-  const anySyncing = isWatchlistLoading || syncingIds.size > 0 || isBackgroundSyncing;
+  const anySyncing = syncingIds.size > 0 || isBackgroundSyncing;
 
   const renderContent = () => {
       if (!userProfile) {
@@ -542,11 +576,9 @@ export default function App() {
                     currentWatchlist={watchlist} 
                     onSyncStart={() => {
                         isInitialSyncing.current = true;
-                        setIsWatchlistLoading(true);
                     }}
                     onSyncFail={() => {
                         isInitialSyncing.current = false;
-                        setIsWatchlistLoading(false);
                     }}
                 />
             )}
@@ -555,9 +587,30 @@ export default function App() {
       );
   };
 
+  // Render public profile if URL matches
+  if (!isPublicViewLoading && publicViewData) {
+    return <PublicProfile profile={publicViewData.profile} watchlist={publicViewData.watchlist} />;
+  }
+
+  // Render error page for public profile
+  if (!isPublicViewLoading && publicViewError) {
+      return (
+        <div className="min-h-screen bg-brand-bg-dark text-brand-text flex flex-col items-center justify-center text-center p-4">
+            <TvIcon className="w-24 h-24 text-brand-primary mb-4" />
+            <h1 className="text-4xl font-bold text-red-500">Could Not Load Profile</h1>
+            <p className="text-lg text-brand-text-muted mt-2">{publicViewError}</p>
+            <a href="/" className="mt-8 px-6 py-3 bg-brand-primary text-white font-semibold rounded-lg hover:bg-indigo-500 transition-colors">
+                Back to AnimeTracker
+            </a>
+        </div>
+      );
+  }
+
   return (
     <div className="min-h-screen bg-brand-bg-dark text-brand-text pb-20 md:pb-0">
-        {isAuthLoading ? (
+        {isAppLoading ? (
+             // Show a spinner if the main app is still loading (auth check, etc.)
+             // or if we are waiting to determine if it's a public path.
              <div className="flex justify-center items-center h-screen">
                 <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-brand-primary"></div>
             </div>
